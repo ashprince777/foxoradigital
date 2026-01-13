@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  role          String    @default("CREATOR") // SUPER_ADMIN, ADMIN, PROJECT_MANAGER, CREATOR, CLIENT
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  projects      Project[] @relation("ProjectManager")
+  createdProjects Project[] @relation("ProjectCreator")
+  tasks         Task[]    @relation("TaskAssignee")
+  createdTasks  Task[]    @relation("TaskCreator")
+  timeEntries   TimeEntry[]
+  comments      Comment[]
+  
+  hourlyRate    Float?
+  capacity      Int?
+  status        String    @default("Active")
+  allowedMenus  String?   // JSON string, e.g., "['Dashboard', 'Projects']"
+}
+
+model Client {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  phone         String?
+  address       String?
+  status        String    @default("Active")
+  brandColor    String?
+  portalAccess  Boolean   @default(false)
+  plan          String?
+  facebookAds   Boolean   @default(false)
+  googleAds     Boolean   @default(false)
+  facebookAdsPrice Float?
+  googleAdsPrice   Float?
+  planPrice         Float?
+  posterDesignPrice Float?
+  videoEditingPrice Float?
+  aiVideoPrice      Float?
+  documentEditingPrice Float?
+  otherWorkPrice    Float?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  projects      Project[]
+  invoices      Invoice[]
+  tasks         Task[]
+  payments      Payment[]
+}
+
+model Project {
+  id            String        @id @default(uuid())
+  name          String
+  description   String?
+  clientId      String
+  status        String        @default("ACTIVE") // ACTIVE, COMPLETED, ARCHIVED, ON_HOLD
+  priority      String        @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  billingType   String        @default("HOURLY") // HOURLY, FIXED
+  budget        Float?
+  startDate     DateTime?
+  dueDate       DateTime?
+  managerId     String?
+  createdById   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  client        Client        @relation(fields: [clientId], references: [id])
+  manager       User?         @relation("ProjectManager", fields: [managerId], references: [id])
+  creator       User?         @relation("ProjectCreator", fields: [createdById], references: [id])
+  tasks         Task[]
+  content       ContentItem[]
+}
+
+model Task {
+  id            String       @id @default(uuid())
+  title         String
+  description   String?
+  status        String       @default("TODO") // TODO, IN_PROGRESS, REVIEW, DONE
+  priority      String       @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  dueDate       DateTime?
+  scheduledDate DateTime?
+  serviceType   String?
+  projectId     String?
+  assigneeId    String?
+  clientId      String?
+  createdById   String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  project       Project?     @relation(fields: [projectId], references: [id])
+  client        Client?      @relation(fields: [clientId], references: [id])
+  assignee      User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator       User?        @relation("TaskCreator", fields: [createdById], references: [id])
+  timeEntries   TimeEntry[]
+  comments      Comment[]
+  subtasks      Subtask[]
+  invoiceId     String?
+  invoice       Invoice?   @relation(fields: [invoiceId], references: [id])
+}
+
+model Subtask {
+  id          String   @id @default(uuid())
+  title       String
+  isCompleted Boolean  @default(false)
+  taskId      String
+  
+  task        Task     @relation(fields: [taskId], references: [id])
+}
+
+model TimeEntry {
+  id          String   @id @default(uuid())
+  taskId      String?
+  userId      String
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int?     // in seconds
+  description String?
+  isBillable  Boolean  @default(true)
+  idleDuration Int     @default(0)
+  
+  task        Task?    @relation(fields: [taskId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model ContentItem {
+  id            String   @id @default(uuid())
+  title         String
+  type          String   // e.g., "BLOG", "SOCIAL", "EMAIL"
+  status        String   // e.g., "DRAFT", "SCHEDULED", "PUBLISHED"
+  scheduledDate DateTime?
+  contentData   String?  // JSON or text content
+  projectId     String
+  
+  project       Project  @relation(fields: [projectId], references: [id])
+}
+
+model Invoice {
+  id            String    @id @default(uuid())
+  invoiceNumber String    @unique // e.g., "INV-00001"
+  clientId      String
+  status        String    @default("DRAFT") // DRAFT, SENT, PAID, OVERDUE, CANCELLED
+  issueDate     DateTime  @default(now())
+  dueDate       DateTime
+  
+  subtotal      Float     @default(0)
+  taxRate       Float     @default(0)
+  taxAmount     Float     @default(0)
+  discount      Float     @default(0)
+  total         Float     @default(0)
+  
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  client        Client        @relation(fields: [clientId], references: [id])
+  items         InvoiceItem[]
+  tasks         Task[]
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Float
+  amount      Float
+  
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+  
+  task      Task     @relation(fields: [taskId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  clientId      String
+  amount        Float
+  paymentDate   DateTime
+  paymentMethod String
+  transactionId String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client        Client   @relation(fields: [clientId], references: [id])
+}
+
+model SystemSettings {
+  id                    String @id
+  authorizedSignatureUrl String?
+}
