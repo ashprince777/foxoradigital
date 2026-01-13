@@ -45,7 +45,11 @@ app.get('/', (req, res) => {
 
 import { initCronJobs } from './cron';
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    initCronJobs();
-});
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+        initCronJobs();
+    });
+}
+
+export default app;
