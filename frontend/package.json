@@ -26,6 +26,7 @@
         "zod": "^3.22.4"
     },
     "devDependencies": {
+        "@types/node": "^25.0.8",
         "@types/react": "^18.2.64",
         "@types/react-big-calendar": "^1.8.9",
         "@types/react-dom": "^18.2.21",
