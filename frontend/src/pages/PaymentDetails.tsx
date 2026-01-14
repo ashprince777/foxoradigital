@@ -20,6 +20,7 @@ interface Invoice {
     task?: {
         title: string;
     };
+    discount?: number;
 }
 
 interface ClientStat {
@@ -80,6 +81,7 @@ const PaymentDetails: React.FC = () => {
             }
             const stat = statsMap.get(inv.clientId)!;
             stat.totalAmount += inv.total;
+            stat.discountedAmount += (inv.discount || 0);
             if (inv.status === 'PAID') {
                 stat.paidAmount += inv.total;
             } else {
