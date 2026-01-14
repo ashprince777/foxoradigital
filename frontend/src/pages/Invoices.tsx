@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
-import { FileText, Plus, Search, Filter, Download, DollarSign, Clock, AlertCircle, Calendar } from 'lucide-react';
+import { FileText, Plus, Search, Filter, Download, DollarSign, Clock, AlertCircle, Calendar, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import NewInvoiceModal from '../components/NewInvoiceModal';
 import GenerateMonthlyInvoicesModal from '../components/GenerateMonthlyInvoicesModal';
@@ -65,6 +65,17 @@ const Invoices: React.FC = () => {
             fetchInvoices();
         } catch (error) {
             console.error('Download failed', error);
+        }
+    };
+
+    const handleDelete = async (invoiceId: string) => {
+        if (!window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) return;
+        try {
+            await api.delete(`/invoices/${invoiceId}`);
+            setInvoices(invoices.filter(inv => inv.id !== invoiceId));
+        } catch (error) {
+            console.error('Delete failed', error);
+            alert('Failed to delete invoice');
         }
     };
 
@@ -234,9 +245,17 @@ const Invoices: React.FC = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                                             <button
                                                 onClick={() => handleDownload(invoice.id, invoice.invoiceNumber)}
-                                                className="text-indigo-600 hover:text-indigo-900 flex items-center justify-center mx-auto"
+                                                className="text-indigo-600 hover:text-indigo-900 flex items-center justify-center mr-3"
+                                                title="Download PDF"
                                             >
-                                                <Download className="h-4 w-4 mr-1" /> Download
+                                                <Download className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(invoice.id)}
+                                                className="text-red-500 hover:text-red-700 flex items-center justify-center"
+                                                title="Delete Invoice"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
                                             </button>
                                         </td>
                                     </tr>

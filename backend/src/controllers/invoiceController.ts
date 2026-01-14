@@ -424,8 +424,6 @@ export const generateMonthlyInvoices = async (req: Request, res: Response) => {
 
             if (tasks.length === 0) continue;
 
-            if (tasks.length === 0) continue;
-
             const client = tasks[0].client || tasks[0].project?.client;
             if (!client) continue; // Should not happen given query but safely handle
             const items = [];
@@ -558,6 +556,34 @@ export const generateCustomInvoice = async (req: Request, res: Response) => {
     } catch (error) {
         console.error(error);
         if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export const deleteInvoice = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const invoice = await prisma.invoice.findUnique({
+            where: { id },
+            include: { tasks: true }
+        });
+
+        if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
+        // Unlink tasks
+        if (invoice.tasks.length > 0) {
+            await prisma.task.updateMany({
+                where: { invoiceId: id },
+                data: { invoiceId: null }
+            });
+        }
+
+        await prisma.invoice.delete({ where: { id } });
+
+        res.json({ message: 'Invoice deleted successfully' });
+    } catch (error) {
+        console.error(error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
