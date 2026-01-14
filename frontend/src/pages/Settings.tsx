@@ -16,8 +16,13 @@ const Settings: React.FC = () => {
         try {
             const response = await api.get('/settings');
             if (response.data?.authorizedSignatureUrl) {
-                // Ensure we construct the full URL if it's relative
-                setSignatureUrl(`${api.defaults.baseURL?.replace('/api', '')}${response.data.authorizedSignatureUrl}`);
+                const url = response.data.authorizedSignatureUrl;
+                // If it's a full URL (Supabase), use it. otherwise append base URL.
+                if (url.startsWith('http')) {
+                    setSignatureUrl(url);
+                } else {
+                    setSignatureUrl(`${api.defaults.baseURL?.replace('/api', '')}${url}`);
+                }
             }
         } catch (error) {
             console.error('Failed to fetch settings', error);
@@ -42,7 +47,12 @@ const Settings: React.FC = () => {
             });
 
             if (response.data.authorizedSignatureUrl) {
-                setSignatureUrl(`${api.defaults.baseURL?.replace('/api', '')}${response.data.authorizedSignatureUrl}`);
+                const url = response.data.authorizedSignatureUrl;
+                if (url.startsWith('http')) {
+                    setSignatureUrl(url);
+                } else {
+                    setSignatureUrl(`${api.defaults.baseURL?.replace('/api', '')}${url}`);
+                }
                 setUploadStatus('success');
                 setMessage('Signature uploaded successfully!');
             }
