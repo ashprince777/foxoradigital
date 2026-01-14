@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { DollarSign, CreditCard, Calendar, AlertCircle, Download, Plus } from 'lucide-react';
+import { DollarSign, CreditCard, Calendar, AlertCircle, Download, Plus, Trash2, Tag } from 'lucide-react';
 import api from '../api/axios';
 import RecordPaymentModal from '../components/RecordPaymentModal';
+import DiscountModal from '../components/DiscountModal';
 
 interface Invoice {
     id: string;
@@ -27,6 +28,7 @@ interface ClientStat {
     totalAmount: number;
     paidAmount: number;
     pendingAmount: number;
+    discountedAmount: number;
     unbilledAmount: number;
     lastPaymentDate?: string;
 }
@@ -34,6 +36,7 @@ interface ClientStat {
 interface PendingAmount {
     client: { id: string; name: string };
     amount: number;
+    discounted: number;
     taskIds: string[];
 }
 
@@ -42,6 +45,7 @@ const PaymentDetails: React.FC = () => {
     const [clientStats, setClientStats] = useState<ClientStat[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
     const [selectedClient, setSelectedClient] = useState<ClientStat | null>(null);
 
     const fetchInvoices = async () => {
@@ -70,6 +74,7 @@ const PaymentDetails: React.FC = () => {
                     totalAmount: 0,
                     paidAmount: 0,
                     pendingAmount: 0,
+                    discountedAmount: 0,
                     unbilledAmount: 0
                 });
             }
@@ -91,13 +96,17 @@ const PaymentDetails: React.FC = () => {
                     totalAmount: 0,
                     paidAmount: 0,
                     pendingAmount: 0,
+                    discountedAmount: 0,
                     unbilledAmount: 0
                 });
             }
             const stat = statsMap.get(item.client.id)!;
             stat.unbilledAmount += item.amount;
             stat.pendingAmount += item.amount; // Add unbilled to total pending
-            stat.totalAmount += item.amount;   // Add unbilled to total revenue
+
+            if (item.discounted) {
+                stat.discountedAmount += item.discounted;
+            }
         });
 
         setClientStats(Array.from(statsMap.values()));
@@ -110,6 +119,11 @@ const PaymentDetails: React.FC = () => {
     const handleRecordPaymentClick = (client: ClientStat) => {
         setSelectedClient(client);
         setIsPaymentModalOpen(true);
+    };
+
+    const handleDiscountClick = (client: ClientStat) => {
+        setSelectedClient(client);
+        setIsDiscountModalOpen(true);
     };
 
     const handleDownload = async (invoiceId: string) => {
@@ -125,6 +139,16 @@ const PaymentDetails: React.FC = () => {
             fetchInvoices(); // Refresh status (DRAFT -> SENT)
         } catch (error) {
             console.error('Download failed', error);
+        }
+    };
+
+    const handleDelete = async (invoiceId: string) => {
+        if (!window.confirm('Are you sure you want to delete this invoice?')) return;
+        try {
+            await api.delete(`/invoices/${invoiceId}`);
+            fetchInvoices();
+        } catch (error) {
+            console.error('Delete failed', error);
         }
     };
 
@@ -190,6 +214,7 @@ const PaymentDetails: React.FC = () => {
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Amount</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Paid Amount</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Pending Amount</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Discounts</th>
                             <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -200,19 +225,29 @@ const PaymentDetails: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">₹{stat.totalAmount.toLocaleString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600">₹{stat.paidAmount.toLocaleString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600">₹{stat.pendingAmount.toLocaleString()}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-purple-600">₹{stat.discountedAmount.toLocaleString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                    <button
-                                        onClick={() => handleRecordPaymentClick(stat)}
-                                        className="text-indigo-600 hover:text-indigo-900 flex items-center justify-center mx-auto"
-                                    >
-                                        <Plus className="h-4 w-4 mr-1" /> Record Payment
-                                    </button>
+                                    <div className="flex justify-center space-x-2">
+                                        <button
+                                            onClick={() => handleRecordPaymentClick(stat)}
+                                            className="text-indigo-600 hover:text-indigo-900 flex items-center"
+                                        >
+                                            <Plus className="h-4 w-4 mr-1" /> Record
+                                        </button>
+                                        <button
+                                            onClick={() => handleDiscountClick(stat)}
+                                            className="text-purple-600 hover:text-purple-900 flex items-center"
+                                            title="Apply Discount"
+                                        >
+                                            <Tag className="h-4 w-4 mr-1" /> Discount
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
                         {clientStats.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">No client payments found.</td>
+                                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">No client payments found.</td>
                             </tr>
                         )}
                     </tbody>
@@ -239,7 +274,7 @@ const PaymentDetails: React.FC = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                         {invoices.slice(0, 10).map((invoice) => (
                             <tr key={invoice.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{invoice.id.slice(0, 8).toUpperCase()}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{invoice.invoiceNumber || invoice.id.slice(0, 8).toUpperCase()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(invoice.createdAt).toLocaleDateString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(invoice.dueDate).toLocaleDateString()}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{invoice.task?.title || '-'}</td>
@@ -255,9 +290,17 @@ const PaymentDetails: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                                     <button
                                         onClick={() => handleDownload(invoice.id)}
-                                        className="text-indigo-600 hover:text-indigo-900 flex items-center justify-center mx-auto"
+                                        className="text-indigo-600 hover:text-indigo-900 flex items-center justify-center mr-3 float-left"
+                                        title="Download PDF"
                                     >
-                                        <Download className="h-4 w-4 mr-1" /> Download
+                                        <Download className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(invoice.id)}
+                                        className="text-red-500 hover:text-red-700 flex items-center justify-center float-left"
+                                        title="Delete Invoice"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
                                     </button>
                                 </td>
                             </tr>
@@ -290,6 +333,12 @@ const PaymentDetails: React.FC = () => {
                 client={selectedClient}
             />
 
+            <DiscountModal
+                isOpen={isDiscountModalOpen}
+                onClose={() => setIsDiscountModalOpen(false)}
+                onSuccess={fetchInvoices}
+                client={selectedClient}
+            />
         </div>
     );
 };

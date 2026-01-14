@@ -37,7 +37,6 @@ const recordPaymentSchema = z.object({
 });
 
 // Helper to generate Invoice Number
-// Helper to generate Invoice Number
 const generateInvoiceNumber = async () => {
     const lastInvoice = await prisma.invoice.findFirst({
         orderBy: { invoiceNumber: 'desc' },
@@ -375,7 +374,7 @@ export const getPendingAmounts = async (req: Request, res: Response) => {
             where: {
                 scheduledDate: { not: null },
                 serviceType: { not: null },
-                status: 'DONE',
+                status: { in: ['DONE', 'DISCOUNTED'] },
                 invoiceId: null,
                 OR: [
                     { clientId: { not: null } },
@@ -385,7 +384,7 @@ export const getPendingAmounts = async (req: Request, res: Response) => {
             include: { client: true, project: { include: { client: true } } }
         });
 
-        const clientPending: Record<string, { client: any, amount: number, taskIds: string[] }> = {};
+        const clientPending: Record<string, { client: any, amount: number, discounted: number, taskIds: string[] }> = {};
 
         for (const task of tasks) {
             const client = task.client || task.project?.client;
@@ -402,14 +401,76 @@ export const getPendingAmounts = async (req: Request, res: Response) => {
 
             if (price > 0) {
                 if (!clientPending[client.id]) {
-                    clientPending[client.id] = { client, amount: 0, taskIds: [] };
+                    clientPending[client.id] = { client, amount: 0, discounted: 0, taskIds: [] };
                 }
-                clientPending[client.id].amount += price;
+
+                if (task.status === 'DONE') {
+                    clientPending[client.id].amount += price;
+                } else if (task.status === 'DISCOUNTED') {
+                    clientPending[client.id].discounted += price;
+                }
+
                 clientPending[client.id].taskIds.push(task.id);
             }
         }
 
         res.json(Object.values(clientPending));
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export const applyDiscount = async (req: Request, res: Response) => {
+    try {
+        const { clientId, amount } = z.object({ clientId: z.string(), amount: z.number().positive() }).parse(req.body);
+        let remaining = amount;
+
+        // Find billable tasks (DONE)
+        const tasks = await prisma.task.findMany({
+            where: {
+                status: 'DONE',
+                invoiceId: null,
+                serviceType: { not: null },
+                OR: [
+                    { clientId },
+                    { project: { clientId } }
+                ]
+            },
+            orderBy: { scheduledDate: 'asc' },
+            include: { client: true, project: { include: { client: true } } }
+        });
+
+        const updatedIds = [];
+
+        for (const task of tasks) {
+            if (remaining <= 0) break;
+
+            const client = task.client || task.project?.client;
+            if (!client) continue;
+
+            let price = 0;
+            switch (task.serviceType) {
+                case 'Poster Design': price = client.posterDesignPrice || 0; break;
+                case 'Video Editing': price = client.videoEditingPrice || 0; break;
+                case 'AI Video': price = client.aiVideoPrice || 0; break;
+                case 'Document Editing': price = client.documentEditingPrice || 0; break;
+                case 'Other Work': price = client.otherWorkPrice || 0; break;
+            }
+
+            if (price > 0 && price <= remaining + 0.01) {
+                updatedIds.push(task.id);
+                remaining -= price;
+            }
+        }
+
+        if (updatedIds.length > 0) {
+            await prisma.task.updateMany({
+                where: { id: { in: updatedIds } },
+                data: { status: 'DISCOUNTED' }
+            });
+        }
+        res.json({ message: 'Discount applied', appliedDetails: updatedIds, remainingDiscount: remaining });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal server error' });
