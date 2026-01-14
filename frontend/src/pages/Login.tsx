@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Lock, Mail } from 'lucide-react';
 
 const loginSchema = z.object({
@@ -114,14 +114,7 @@ const Login: React.FC = () => {
                         </div>
                     </form>
                 </div>
-                <div className="text-center mt-6">
-                    <p className="text-sm text-gray-600">
-                        Don't have an account?{' '}
-                        <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
-                            Sign up
-                        </Link>
-                    </p>
-                </div>
+
             </div>
         </div>
     );
