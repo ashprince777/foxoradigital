@@ -4,7 +4,9 @@ import { z } from 'zod';
 import PDFDocument from 'pdfkit';
 import { toWords } from 'number-to-words';
 import fs from 'fs';
+import fs from 'fs';
 import path from 'path';
+import axios from 'axios';
 
 const invoiceItemSchema = z.object({
     description: z.string().min(1),
@@ -253,20 +255,50 @@ export const downloadInvoice = async (req: Request, res: Response) => {
 
         doc.fontSize(10).text('Thanks for your business.', 50, footerY + 80);
 
+        // Check for page break before signature
+        if (doc.y > 650) {
+            doc.addPage();
+        }
+
         // Signature
         const settings = await prisma.systemSettings.findUnique({ where: { id: 'default' } });
         if (settings?.authorizedSignatureUrl) {
-            const signaturePath = path.join(__dirname, '../../', settings.authorizedSignatureUrl);
-            if (fs.existsSync(signaturePath)) {
-                doc.image(signaturePath, 400, footerY + 80, { width: 100, height: 50, fit: [100, 50] }); // Adjust size/fit as needed
-            } else {
-                // Fallback if file missing
-                doc.fontSize(12).font('Helvetica-Oblique').text('Signed', 400, footerY + 80);
+            try {
+                let signatureBuffer: Buffer | null = null;
+                const sigY = doc.y + 20;
+
+                if (settings.authorizedSignatureUrl.startsWith('http')) {
+                    // Fetch from Supabase
+                    const response = await axios.get(settings.authorizedSignatureUrl, { responseType: 'arraybuffer' });
+                    signatureBuffer = Buffer.from(response.data);
+                } else {
+                    // Local file fallback
+                    const signaturePath = path.join(__dirname, '../../', settings.authorizedSignatureUrl);
+                    if (fs.existsSync(signaturePath)) {
+                        signatureBuffer = fs.readFileSync(signaturePath);
+                    }
+                }
+
+                if (signatureBuffer) {
+                    doc.image(signatureBuffer, 400, sigY, { width: 100, height: 50, fit: [100, 50] });
+                } else {
+                    throw new Error('Image data empty');
+                }
+            } catch (error) {
+                console.error('Failed to load signature image:', error);
+                doc.fontSize(12).font('Helvetica-Oblique').text('Signed', 400, doc.y + 40);
             }
         } else {
-            // Default Fallback
-            doc.image(path.join(__dirname, '../../../frontend/public/foxora-logo.png'), 400, footerY + 80, { width: 60, height: 30 });
+            // Default Fallback Logo
+            try {
+                const logoPath = path.join(__dirname, '../../../frontend/public/foxora-logo.png');
+                if (fs.existsSync(logoPath)) {
+                    doc.image(logoPath, 400, doc.y + 20, { width: 60, height: 30 });
+                }
+            } catch (e) { /* ignore */ }
         }
+
+        doc.fontSize(9).font('Helvetica').text('Authorized Signature', 400, doc.y + 80);
 
         doc.fontSize(9).font('Helvetica').text('Authorized Signature', 400, footerY + 135);
 
