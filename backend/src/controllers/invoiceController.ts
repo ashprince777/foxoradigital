@@ -37,7 +37,21 @@ const recordPaymentSchema = z.object({
 });
 
 // Helper to generate Invoice Number
+// Helper to generate Invoice Number
 const generateInvoiceNumber = async () => {
+    const lastInvoice = await prisma.invoice.findFirst({
+        orderBy: { invoiceNumber: 'desc' },
+    });
+
+    if (!lastInvoice) return 'INV-00001';
+
+    // Extract number part
+    const match = lastInvoice.invoiceNumber.match(/INV-(\d+)/);
+    if (match) {
+        const lastNum = parseInt(match[1], 10);
+        return `INV-${String(lastNum + 1).padStart(5, '0')}`;
+    }
+
     const count = await prisma.invoice.count();
     return `INV-${String(count + 1).padStart(5, '0')}`;
 }
