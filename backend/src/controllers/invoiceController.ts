@@ -280,7 +280,7 @@ export const downloadInvoice = async (req: Request, res: Response) => {
                 }
 
                 if (signatureBuffer) {
-                    doc.image(signatureBuffer, 400, sigY, { width: 100, height: 50, fit: [100, 50] });
+                    doc.image(signatureBuffer, 400, sigY, { width: 150 });
                 } else {
                     throw new Error('Image data empty');
                 }
@@ -298,7 +298,7 @@ export const downloadInvoice = async (req: Request, res: Response) => {
             } catch (e) { /* ignore */ }
         }
 
-        doc.fontSize(9).font('Helvetica').text('Authorized Signature', 400, doc.y + 80);
+
 
         doc.fontSize(9).font('Helvetica').text('Authorized Signature', 400, footerY + 135);
 
