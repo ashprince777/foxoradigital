@@ -425,52 +425,89 @@ export const applyDiscount = async (req: Request, res: Response) => {
     try {
         const { clientId, amount } = z.object({ clientId: z.string(), amount: z.number().positive() }).parse(req.body);
         let remaining = amount;
+        const appliedDetails: { invoices: string[], tasks: string[] } = { invoices: [], tasks: [] };
 
-        // Find billable tasks (DONE)
-        const tasks = await prisma.task.findMany({
+        // 1. Prioritize Invoices (Draft, Sent, Overdue)
+        const invoices = await prisma.invoice.findMany({
             where: {
-                status: 'DONE',
-                invoiceId: null,
-                serviceType: { not: null },
-                OR: [
-                    { clientId },
-                    { project: { clientId } }
-                ]
+                clientId,
+                status: { in: ['SENT', 'DRAFT', 'OVERDUE'] },
+                total: { gt: 0 }
             },
-            orderBy: { scheduledDate: 'asc' },
-            include: { client: true, project: { include: { client: true } } }
+            orderBy: { createdAt: 'asc' }
         });
 
-        const updatedIds = [];
+        for (const invoice of invoices) {
+            if (remaining <= 0.01) break;
 
-        for (const task of tasks) {
-            if (remaining <= 0) break;
+            const toApply = Math.min(remaining, invoice.total);
+            const newTotal = invoice.total - toApply;
 
-            const client = task.client || task.project?.client;
-            if (!client) continue;
-
-            let price = 0;
-            switch (task.serviceType) {
-                case 'Poster Design': price = client.posterDesignPrice || 0; break;
-                case 'Video Editing': price = client.videoEditingPrice || 0; break;
-                case 'AI Video': price = client.aiVideoPrice || 0; break;
-                case 'Document Editing': price = client.documentEditingPrice || 0; break;
-                case 'Other Work': price = client.otherWorkPrice || 0; break;
-            }
-
-            if (price > 0 && price <= remaining + 0.01) {
-                updatedIds.push(task.id);
-                remaining -= price;
-            }
-        }
-
-        if (updatedIds.length > 0) {
-            await prisma.task.updateMany({
-                where: { id: { in: updatedIds } },
-                data: { status: 'DISCOUNTED' }
+            // Update Invoice
+            await prisma.invoice.update({
+                where: { id: invoice.id },
+                data: {
+                    discount: (invoice.discount || 0) + toApply,
+                    total: newTotal,
+                    // If fully discounted (total 0), mark as PAID so it moves out of Pending
+                    status: newTotal <= 0.01 ? 'PAID' : invoice.status
+                }
             });
+
+            remaining -= toApply;
+            appliedDetails.invoices.push(invoice.id);
         }
-        res.json({ message: 'Discount applied', appliedDetails: updatedIds, remainingDiscount: remaining });
+
+        // 2. Process Unbilled Tasks (if remaining discount)
+        if (remaining > 0.01) {
+            // Find billable tasks (DONE)
+            const tasks = await prisma.task.findMany({
+                where: {
+                    status: 'DONE',
+                    invoiceId: null,
+                    serviceType: { not: null },
+                    OR: [
+                        { clientId },
+                        { project: { clientId } }
+                    ]
+                },
+                orderBy: { scheduledDate: 'asc' },
+                include: { client: true, project: { include: { client: true } } }
+            });
+
+            const updatedTaskIds = [];
+
+            for (const task of tasks) {
+                if (remaining <= 0) break;
+
+                const client = task.client || task.project?.client;
+                if (!client) continue;
+
+                let price = 0;
+                switch (task.serviceType) {
+                    case 'Poster Design': price = client.posterDesignPrice || 0; break;
+                    case 'Video Editing': price = client.videoEditingPrice || 0; break;
+                    case 'AI Video': price = client.aiVideoPrice || 0; break;
+                    case 'Document Editing': price = client.documentEditingPrice || 0; break;
+                    case 'Other Work': price = client.otherWorkPrice || 0; break;
+                }
+
+                if (price > 0 && price <= remaining + 0.01) {
+                    updatedTaskIds.push(task.id);
+                    remaining -= price;
+                }
+            }
+
+            if (updatedTaskIds.length > 0) {
+                await prisma.task.updateMany({
+                    where: { id: { in: updatedTaskIds } },
+                    data: { status: 'DISCOUNTED' }
+                });
+                appliedDetails.tasks = updatedTaskIds;
+            }
+        }
+
+        res.json({ message: 'Discount applied', appliedDetails, remainingDiscount: remaining });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Internal server error' });
