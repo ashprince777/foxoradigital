@@ -244,14 +244,30 @@ export const downloadInvoice = async (req: Request, res: Response) => {
         const totalLabelX = 350;
         const totalValueX = 450;
 
-        doc.font('Helvetica-Bold').text('Sub Total', totalLabelX, footerY, { align: 'right', width: 100 });
-        doc.text(invoice.subtotal.toFixed(2), totalValueX, footerY, { align: 'right', width: 90 });
+        let currentY = footerY;
 
-        doc.text('Total', totalLabelX, footerY + 20, { align: 'right', width: 100 });
-        doc.text('Rs. ' + invoice.total.toFixed(2), totalValueX, footerY + 20, { align: 'right', width: 90 });
+        doc.font('Helvetica-Bold').text('Sub Total', totalLabelX, currentY, { align: 'right', width: 100 });
+        doc.text(invoice.subtotal.toFixed(2), totalValueX, currentY, { align: 'right', width: 90 });
+        currentY += 20;
 
-        doc.text('Balance Due', totalLabelX, footerY + 40, { align: 'right', width: 100 });
-        doc.text('Rs. ' + invoice.total.toFixed(2), totalValueX, footerY + 40, { align: 'right', width: 90 });
+        if (invoice.discount > 0) {
+            doc.text('Discount', totalLabelX, currentY, { align: 'right', width: 100 });
+            doc.text('- ' + invoice.discount.toFixed(2), totalValueX, currentY, { align: 'right', width: 90 });
+            currentY += 20;
+        }
+
+        if (invoice.taxAmount > 0) {
+            doc.text(`Tax (${invoice.taxRate}%)`, totalLabelX, currentY, { align: 'right', width: 100 });
+            doc.text(invoice.taxAmount.toFixed(2), totalValueX, currentY, { align: 'right', width: 90 });
+            currentY += 20;
+        }
+
+        doc.text('Total', totalLabelX, currentY, { align: 'right', width: 100 });
+        doc.text('Rs. ' + invoice.total.toFixed(2), totalValueX, currentY, { align: 'right', width: 90 });
+        currentY += 20;
+
+        doc.text('Balance Due', totalLabelX, currentY, { align: 'right', width: 100 });
+        doc.text('Rs. ' + invoice.total.toFixed(2), totalValueX, currentY, { align: 'right', width: 90 });
 
         // Total in words
         doc.font('Helvetica-Oblique').fontSize(10).text('Total In Words', 50, footerY);

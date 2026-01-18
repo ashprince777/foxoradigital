@@ -144,7 +144,18 @@ const Reports: React.FC = () => {
                                         {formatTime(stat.idleSeconds)}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {stat.lastActive ? new Date(stat.lastActive).toLocaleString() : 'N/A'}
+                                        {stat.lastActive ? (
+                                            Math.abs(new Date().getTime() - new Date(stat.lastActive).getTime()) < 60000 ? (
+                                                <span className="text-green-600 font-medium flex items-center">
+                                                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                                                    Active Now
+                                                </span>
+                                            ) : (
+                                                new Date(stat.lastActive).toLocaleString()
+                                            )
+                                        ) : (
+                                            'N/A'
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <button

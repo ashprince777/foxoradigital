@@ -115,7 +115,7 @@ export const getProductivityStats = async (req: Request, res: Response) => {
                 };
             }
 
-            // Aggregation for all users
+            // Aggregation for all users (Completed Logged Time)
             const timeAggregations = await prisma.timeEntry.groupBy({
                 by: ['userId'],
                 where: {
@@ -131,15 +131,39 @@ export const getProductivityStats = async (req: Request, res: Response) => {
                 }
             });
 
+            // Fetch Active Sessions (Running Timers)
+            const activeEntries = await prisma.timeEntry.findMany({
+                where: {
+                    endTime: null
+                }
+            });
+
             const userStats = allUsers.map(u => {
                 const stats = timeAggregations.find(s => s.userId === u.id);
+                const activeEntry = activeEntries.find(e => e.userId === u.id);
+
+                let totalSeconds = stats?._sum.duration || 0;
+                let idleSeconds = stats?._sum.idleDuration || 0;
+                let lastActive = stats?._max.endTime || null;
+
+                // Add active session time
+                if (activeEntry) {
+                    const currentDuration = Math.floor((Date.now() - new Date(activeEntry.startTime).getTime()) / 1000);
+                    // Only add positive duration (in case of clock skew or whatever)
+                    if (currentDuration > 0) {
+                        totalSeconds += currentDuration;
+                    }
+                    idleSeconds += (activeEntry.idleDuration || 0);
+                    lastActive = new Date(); // They are active right now
+                }
+
                 return {
                     id: u.id,
                     name: u.name,
                     role: u.role,
-                    totalSeconds: stats?._sum.duration || 0,
-                    idleSeconds: stats?._sum.idleDuration || 0,
-                    lastActive: stats?._max.endTime || null
+                    totalSeconds,
+                    idleSeconds,
+                    lastActive
                 };
             });
 

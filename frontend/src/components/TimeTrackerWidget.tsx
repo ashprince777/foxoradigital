@@ -27,6 +27,7 @@ const TimeTrackerWidget: React.FC = () => {
                     setIsActive(true);
                     setDescription(response.data.description || '');
                     setIsBillable(response.data.isBillable);
+                    setAccumulatedIdleTime(response.data.idleDuration || 0);
                 } else {
                     // AUTO START (User Requirement)
                     try {

@@ -21,6 +21,7 @@ interface Invoice {
         title: string;
     };
     discount?: number;
+    invoiceNumber?: string;
 }
 
 interface ClientStat {
